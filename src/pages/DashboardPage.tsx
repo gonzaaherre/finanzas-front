@@ -4,13 +4,17 @@ import { getExpenses } from '../api/expenses'
 import { getCurrencies } from '../api/currencies'
 import { getMonthlyIncome, saveMonthlyIncome } from '../api/incomes'
 import { getErrorMessage } from '../api/client'
-import { TrendingUp, Receipt, Tag } from 'lucide-react'
+import { TrendingUp, Receipt, Tag, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import type { Currency, Expense, MonthlyIncome } from '../types'
 
 const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+const MONTHS_FULL = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
 
 const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
 const labelCls = 'block text-xs font-medium text-gray-700 mb-1.5'
@@ -51,10 +55,13 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   )
 }
 
+const today = new Date()
+
 export default function DashboardPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading]   = useState(true)
   const [currencies, setCurrencies]         = useState<Currency[]>([])
+  const [viewDate, setViewDate]             = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
   const [income, setIncome]                 = useState<MonthlyIncome | null>(null)
   const [incomeAmount, setIncomeAmount]     = useState('')
   const [incomeCurrency, setIncomeCurrency] = useState('ARS')
@@ -62,43 +69,50 @@ export default function DashboardPage() {
   const [incomeError, setIncomeError]       = useState('')
   const [incomeSaved, setIncomeSaved]       = useState(false)
 
-  useEffect(() => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = now.getMonth() + 1
+  const viewYear  = viewDate.getFullYear()
+  const viewMonth = viewDate.getMonth()
+  const isCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth()
 
-    Promise.all([
-      getExpenses(),
-      getCurrencies(),
-      getMonthlyIncome(year, month)
-        .then(res => res.data)
-        .catch(err => {
-          if (isAxiosError(err) && err.response?.status === 404) return null
-          throw err
-        }),
-    ])
-      .then(([expensesRes, currenciesRes, incomeData]) => {
+  useEffect(() => {
+    Promise.all([getExpenses(), getCurrencies()])
+      .then(([expensesRes, currenciesRes]) => {
         setExpenses(expensesRes.data)
         setCurrencies(currenciesRes.data)
-        if (incomeData) {
-          setIncome(incomeData)
-          setIncomeAmount(String(incomeData.amount))
-          setIncomeCurrency(incomeData.currency.code)
-        } else if (currenciesRes.data[0]) {
-          setIncomeCurrency(currenciesRes.data[0].code)
-        }
       })
       .finally(() => setLoading(false))
   }, [])
 
-  const now = new Date()
+  useEffect(() => {
+    let cancelled = false
+    setIncomeError('')
+    setIncomeSaved(false)
+
+    getMonthlyIncome(viewYear, viewMonth + 1)
+      .then(res => res.data)
+      .catch(err => {
+        if (isAxiosError(err) && err.response?.status === 404) return null
+        throw err
+      })
+      .then(incomeData => {
+        if (cancelled) return
+        setIncome(incomeData)
+        setIncomeAmount(incomeData ? String(incomeData.amount) : '')
+        setIncomeCurrency(incomeData ? incomeData.currency.code : 'ARS')
+      })
+
+    return () => { cancelled = true }
+  }, [viewYear, viewMonth])
+
+  const changeMonth = (delta: number) => {
+    setViewDate(d => new Date(d.getFullYear(), d.getMonth() + delta, 1))
+  }
 
   const handleIncomeSave = async () => {
     setIncomeSaving(true)
     setIncomeError('')
     setIncomeSaved(false)
     try {
-      const { data } = await saveMonthlyIncome(now.getFullYear(), now.getMonth() + 1, {
+      const { data } = await saveMonthlyIncome(viewYear, viewMonth + 1, {
         amount: parseFloat(incomeAmount),
         currencyCode: incomeCurrency,
       })
@@ -111,30 +125,29 @@ export default function DashboardPage() {
     }
   }
 
-  const thisMonth = expenses.filter(e => {
-    const d = new Date(e.date)
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-  })
+  const monthExpenses = expenses
+    .filter(e => {
+      const d = new Date(e.date)
+      return d.getMonth() === viewMonth && d.getFullYear() === viewYear
+    })
 
-  const totalThisMonth = thisMonth.reduce((s, e) => s + Number(e.amount), 0)
+  const totalMonth = monthExpenses.reduce((s, e) => s + Number(e.amount), 0)
 
   const chartData = MONTHS.map((name, i) => ({
     name,
     total: expenses
       .filter(e => {
         const d = new Date(e.date)
-        return d.getMonth() === i && d.getFullYear() === now.getFullYear()
+        return d.getMonth() === i && d.getFullYear() === today.getFullYear()
       })
       .reduce((s, e) => s + Number(e.amount), 0),
   }))
 
   const categoryCount: Record<string, number> = {}
-  expenses.forEach(e => {
+  monthExpenses.forEach(e => {
     if (e.category) categoryCount[e.category.name] = (categoryCount[e.category.name] || 0) + 1
   })
   const topCategory = Object.entries(categoryCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—'
-
-  const recent = expenses.slice(0, 6)
 
   if (loading) {
     return (
@@ -152,10 +165,37 @@ export default function DashboardPage() {
         <p className="text-gray-500 text-sm mt-0.5">Resumen de tus finanzas</p>
       </div>
 
+      {/* Month navigator */}
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => changeMonth(-1)}
+          className="p-1.5 border border-gray-200 rounded-md text-gray-500 hover:bg-gray-100 transition-colors"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <p className="text-sm font-medium text-gray-900 w-36 text-center">
+          {MONTHS_FULL[viewMonth]} {viewYear}
+        </p>
+        <button
+          onClick={() => changeMonth(1)}
+          className="p-1.5 border border-gray-200 rounded-md text-gray-500 hover:bg-gray-100 transition-colors"
+        >
+          <ChevronRight size={16} />
+        </button>
+        {!isCurrentMonth && (
+          <button
+            onClick={() => setViewDate(new Date(today.getFullYear(), today.getMonth(), 1))}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Hoy
+          </button>
+        )}
+      </div>
+
       {/* Monthly income */}
       <div className="bg-white rounded-lg border border-gray-200 p-5 mb-6">
         <p className="text-sm font-medium text-gray-700 mb-3">
-          Ingreso de {MONTHS[now.getMonth()]} {now.getFullYear()}
+          Ingreso de {MONTHS_FULL[viewMonth]} {viewYear}
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[140px]">
@@ -191,13 +231,13 @@ export default function DashboardPage() {
       {/* Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <StatCard
-          label="Total este mes"
-          value={`$${totalThisMonth.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`}
+          label="Total del mes"
+          value={`$${totalMonth.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`}
           icon={TrendingUp}
         />
         <StatCard
-          label="Gastos este mes"
-          value={thisMonth.length}
+          label="Gastos del mes"
+          value={monthExpenses.length}
           icon={Receipt}
         />
         <StatCard
@@ -210,7 +250,7 @@ export default function DashboardPage() {
       {/* Chart */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <p className="text-sm font-medium text-gray-700 mb-5">
-          Gastos por mes — {now.getFullYear()}
+          Gastos por mes — {today.getFullYear()}
         </p>
         <ResponsiveContainer width="100%" height={210}>
           <BarChart data={chartData} barSize={24} margin={{ top: 0, right: 4, left: -10, bottom: 0 }}>
@@ -233,18 +273,18 @@ export default function DashboardPage() {
         </ResponsiveContainer>
       </div>
 
-      {/* Recent */}
+      {/* Monthly expenses */}
       <div className="bg-white rounded-lg border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-100">
-          <p className="text-sm font-medium text-gray-700">Últimos gastos</p>
+          <p className="text-sm font-medium text-gray-700">Gastos de {MONTHS_FULL[viewMonth]} {viewYear}</p>
         </div>
-        {recent.length === 0 ? (
+        {monthExpenses.length === 0 ? (
           <p className="px-6 py-10 text-center text-gray-400 text-sm">
-            Todavía no registraste gastos
+            No hay gastos registrados en este mes
           </p>
         ) : (
-          <div className="divide-y divide-gray-50">
-            {recent.map(e => (
+          <div className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto">
+            {monthExpenses.map(e => (
               <div key={e.id} className="px-6 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm text-gray-800 truncate">
