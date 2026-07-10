@@ -1,32 +1,51 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from 'react'
 import { getExpenses, createExpense, updateExpense, deleteExpense } from '../api/expenses'
 import { getCategories } from '../api/categories'
+import { getPaymentMethods } from '../api/paymentMethods'
 import { getCurrencies } from '../api/currencies'
-import { Plus, Pencil, Trash2, X, SlidersHorizontal } from 'lucide-react'
+import { getErrorMessage } from '../api/client'
+import { Plus, Pencil, Trash2, X, SlidersHorizontal, Repeat } from 'lucide-react'
+import type { Category, Currency, Expense, ExpenseFilters, ExpenseRequest, ExpenseType, PaymentMethod } from '../types'
 
-const EMPTY = {
-  amount: '', type: 'PERSONAL', description: '',
-  date: new Date().toISOString().split('T')[0],
-  categoryId: '', currencyCode: 'ARS',
+interface ExpenseFormState {
+  amount: string
+  type: ExpenseType
+  description: string
+  date: string
+  categoryId: string
+  paymentMethodId: string
+  currencyCode: string
 }
 
-function Modal({ title, onClose, children }) {
+const EMPTY: ExpenseFormState = {
+  amount: '', type: 'PERSONAL', description: '',
+  date: new Date().toISOString().split('T')[0],
+  categoryId: '', paymentMethodId: '', currencyCode: 'ARS',
+}
+
+interface ModalProps {
+  title: string
+  onClose: () => void
+  children: ReactNode
+}
+
+function Modal({ title, onClose, children }: ModalProps) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X size={18} />
           </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-6 py-5 overflow-y-auto">{children}</div>
       </div>
     </div>
   )
 }
 
-function Badge({ type }) {
+function Badge({ type }: { type: ExpenseType }) {
   const isPersonal = type === 'PERSONAL'
   return (
     <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
@@ -37,26 +56,36 @@ function Badge({ type }) {
   )
 }
 
+interface FiltersState {
+  from: string
+  to: string
+  type: ExpenseType | ''
+  categoryId: string
+  paymentMethodId: string
+}
+
 export default function ExpensesPage() {
-  const [expenses,   setExpenses]   = useState([])
-  const [categories, setCategories] = useState([])
-  const [currencies, setCurrencies] = useState([])
+  const [expenses,       setExpenses]       = useState<Expense[]>([])
+  const [categories,     setCategories]     = useState<Category[]>([])
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
+  const [currencies,     setCurrencies]     = useState<Currency[]>([])
   const [loading,    setLoading]    = useState(true)
   const [modal,      setModal]      = useState(false)
-  const [editing,    setEditing]    = useState(null)
-  const [form,       setForm]       = useState(EMPTY)
-  const [filters,    setFilters]    = useState({ from: '', to: '', type: '', categoryId: '' })
+  const [editing,    setEditing]    = useState<Expense | null>(null)
+  const [form,       setForm]       = useState<ExpenseFormState>(EMPTY)
+  const [filters,    setFilters]    = useState<FiltersState>({ from: '', to: '', type: '', categoryId: '', paymentMethodId: '' })
   const [saving,     setSaving]     = useState(false)
   const [error,      setError]      = useState('')
   const [showFilters, setShowFilters] = useState(false)
 
   const loadMeta = useCallback(async () => {
-    const [cat, cur] = await Promise.all([getCategories(), getCurrencies()])
+    const [cat, pm, cur] = await Promise.all([getCategories(), getPaymentMethods(), getCurrencies()])
     setCategories(cat.data)
+    setPaymentMethods(pm.data)
     setCurrencies(cur.data)
   }, [])
 
-  const loadExpenses = useCallback(async (params = {}) => {
+  const loadExpenses = useCallback(async (params: ExpenseFilters = {}) => {
     const { data } = await getExpenses(params)
     setExpenses(data)
   }, [])
@@ -66,16 +95,17 @@ export default function ExpensesPage() {
   }, [loadMeta, loadExpenses])
 
   const applyFilters = () => {
-    const params = {}
+    const params: ExpenseFilters = {}
     if (filters.from)       params.from       = filters.from
     if (filters.to)         params.to         = filters.to
     if (filters.type)       params.type       = filters.type
-    if (filters.categoryId) params.categoryId = filters.categoryId
+    if (filters.categoryId)      params.categoryId      = filters.categoryId
+    if (filters.paymentMethodId) params.paymentMethodId = filters.paymentMethodId
     loadExpenses(params)
   }
 
   const clearFilters = () => {
-    setFilters({ from: '', to: '', type: '', categoryId: '' })
+    setFilters({ from: '', to: '', type: '', categoryId: '', paymentMethodId: '' })
     loadExpenses()
   }
 
@@ -86,38 +116,44 @@ export default function ExpensesPage() {
     setModal(true)
   }
 
-  const openEdit = (exp) => {
+  const openEdit = (exp: Expense) => {
     setEditing(exp)
     setForm({
-      amount:       exp.amount,
+      amount:       String(exp.amount),
       type:         exp.type,
       description:  exp.description ?? '',
       date:         exp.date,
-      categoryId:   exp.category?.id ?? '',
-      currencyCode: exp.currency?.code ?? 'ARS',
+      categoryId:      exp.category?.id ?? '',
+      paymentMethodId: exp.paymentMethod?.id ?? '',
+      currencyCode:    exp.currency?.code ?? 'ARS',
     })
     setError('')
     setModal(true)
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setSaving(true)
     setError('')
     try {
-      const payload = { ...form, amount: parseFloat(form.amount), categoryId: form.categoryId || null }
+      const payload: ExpenseRequest = {
+        ...form,
+        amount: parseFloat(form.amount),
+        categoryId: form.categoryId || null,
+        paymentMethodId: form.paymentMethodId || null,
+      }
       if (editing) await updateExpense(editing.id, payload)
       else         await createExpense(payload)
       setModal(false)
       loadExpenses()
     } catch (err) {
-      setError(err.response?.data?.error ?? 'Error al guardar')
+      setError(getErrorMessage(err, 'Error al guardar'))
     } finally {
       setSaving(false)
     }
   }
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('¿Eliminar este gasto?')) return
     await deleteExpense(id)
     loadExpenses()
@@ -127,9 +163,9 @@ export default function ExpensesPage() {
   const labelCls = 'block text-xs font-medium text-gray-700 mb-1.5'
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Gastos</h2>
           <p className="text-gray-500 text-sm mt-0.5">{expenses.length} registros</p>
@@ -170,7 +206,7 @@ export default function ExpensesPage() {
             </div>
             <div>
               <label className={labelCls}>Tipo</label>
-              <select value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value })}
+              <select value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value as ExpenseType | '' })}
                 className="px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">Todos</option>
                 <option value="PERSONAL">Personal</option>
@@ -183,6 +219,14 @@ export default function ExpensesPage() {
                 className="px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">Todas</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Método de pago</label>
+              <select value={filters.paymentMethodId} onChange={e => setFilters({ ...filters, paymentMethodId: e.target.value })}
+                className="px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Todos</option>
+                {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div className="flex gap-2">
@@ -200,12 +244,13 @@ export default function ExpensesPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-sm min-w-[720px]">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
               <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
               <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
+              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Método de pago</th>
               <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
               <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
               <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
@@ -215,18 +260,25 @@ export default function ExpensesPage() {
           <tbody className="divide-y divide-gray-50">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-10 text-center text-gray-400 text-sm">Cargando...</td>
+                <td colSpan={7} className="px-6 py-10 text-center text-gray-400 text-sm">Cargando...</td>
               </tr>
             ) : expenses.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-10 text-center text-gray-400 text-sm">
+                <td colSpan={7} className="px-6 py-10 text-center text-gray-400 text-sm">
                   No hay gastos. ¡Creá el primero!
                 </td>
               </tr>
             ) : expenses.map(e => (
               <tr key={e.id} className="hover:bg-gray-50 transition-colors group">
                 <td className="px-6 py-3 text-gray-800">
-                  {e.description || <span className="text-gray-400 italic">Sin descripción</span>}
+                  <span className="inline-flex items-center gap-1.5">
+                    {e.description || <span className="text-gray-400 italic">Sin descripción</span>}
+                    {e.recurringExpenseId && (
+                      <span title={e.totalInstallments ? `Cuota ${e.installmentNumber} de ${e.totalInstallments}` : 'Gasto fijo'}>
+                        <Repeat size={12} className="text-gray-400 flex-shrink-0" />
+                      </span>
+                    )}
+                  </span>
                 </td>
                 <td className="px-6 py-3">
                   {e.category ? (
@@ -236,6 +288,9 @@ export default function ExpensesPage() {
                       <span className="text-gray-600">{e.category.name}</span>
                     </span>
                   ) : <span className="text-gray-400">—</span>}
+                </td>
+                <td className="px-6 py-3 text-gray-600">
+                  {e.paymentMethod?.name ?? <span className="text-gray-400">—</span>}
                 </td>
                 <td className="px-6 py-3"><Badge type={e.type} /></td>
                 <td className="px-6 py-3 text-gray-500 tabular-nums">{e.date}</td>
@@ -293,7 +348,7 @@ export default function ExpensesPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>Tipo *</label>
-                <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
+                <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ExpenseType })}
                   className={inputCls}>
                   <option value="PERSONAL">Personal</option>
                   <option value="WORK">Trabajo</option>
@@ -314,6 +369,16 @@ export default function ExpensesPage() {
                 className={inputCls}>
                 <option value="">Sin categoría</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className={labelCls}>Método de pago</label>
+              <select value={form.paymentMethodId}
+                onChange={e => setForm({ ...form, paymentMethodId: e.target.value })}
+                className={inputCls}>
+                <option value="">Sin método de pago</option>
+                {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
 

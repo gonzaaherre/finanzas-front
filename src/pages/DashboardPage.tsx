@@ -1,13 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ComponentType } from 'react'
+import { isAxiosError } from 'axios'
 import { getExpenses } from '../api/expenses'
+import { getCurrencies } from '../api/currencies'
+import { getMonthlyIncome, saveMonthlyIncome } from '../api/incomes'
+import { getErrorMessage } from '../api/client'
 import { TrendingUp, Receipt, Tag } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
+import type { Currency, Expense, MonthlyIncome } from '../types'
 
 const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
-function StatCard({ label, value, icon: Icon }) {
+const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+const labelCls = 'block text-xs font-medium text-gray-700 mb-1.5'
+
+interface StatCardProps {
+  label: string
+  value: string | number
+  icon: ComponentType<{ size?: number; className?: string }>
+}
+
+function StatCard({ label, value, icon: Icon }: StatCardProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-3">
@@ -19,7 +33,13 @@ function StatCard({ label, value, icon: Icon }) {
   )
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: { value: number }[]
+  label?: string
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs shadow-sm">
@@ -32,16 +52,64 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function DashboardPage() {
-  const [expenses, setExpenses] = useState([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading]   = useState(true)
+  const [currencies, setCurrencies]         = useState<Currency[]>([])
+  const [income, setIncome]                 = useState<MonthlyIncome | null>(null)
+  const [incomeAmount, setIncomeAmount]     = useState('')
+  const [incomeCurrency, setIncomeCurrency] = useState('ARS')
+  const [incomeSaving, setIncomeSaving]     = useState(false)
+  const [incomeError, setIncomeError]       = useState('')
+  const [incomeSaved, setIncomeSaved]       = useState(false)
 
   useEffect(() => {
-    getExpenses()
-      .then(({ data }) => setExpenses(data))
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth() + 1
+
+    Promise.all([
+      getExpenses(),
+      getCurrencies(),
+      getMonthlyIncome(year, month)
+        .then(res => res.data)
+        .catch(err => {
+          if (isAxiosError(err) && err.response?.status === 404) return null
+          throw err
+        }),
+    ])
+      .then(([expensesRes, currenciesRes, incomeData]) => {
+        setExpenses(expensesRes.data)
+        setCurrencies(currenciesRes.data)
+        if (incomeData) {
+          setIncome(incomeData)
+          setIncomeAmount(String(incomeData.amount))
+          setIncomeCurrency(incomeData.currency.code)
+        } else if (currenciesRes.data[0]) {
+          setIncomeCurrency(currenciesRes.data[0].code)
+        }
+      })
       .finally(() => setLoading(false))
   }, [])
 
   const now = new Date()
+
+  const handleIncomeSave = async () => {
+    setIncomeSaving(true)
+    setIncomeError('')
+    setIncomeSaved(false)
+    try {
+      const { data } = await saveMonthlyIncome(now.getFullYear(), now.getMonth() + 1, {
+        amount: parseFloat(incomeAmount),
+        currencyCode: incomeCurrency,
+      })
+      setIncome(data)
+      setIncomeSaved(true)
+    } catch (err) {
+      setIncomeError(getErrorMessage(err, 'Error al guardar el ingreso'))
+    } finally {
+      setIncomeSaving(false)
+    }
+  }
 
   const thisMonth = expenses.filter(e => {
     const d = new Date(e.date)
@@ -60,7 +128,7 @@ export default function DashboardPage() {
       .reduce((s, e) => s + Number(e.amount), 0),
   }))
 
-  const categoryCount = {}
+  const categoryCount: Record<string, number> = {}
   expenses.forEach(e => {
     if (e.category) categoryCount[e.category.name] = (categoryCount[e.category.name] || 0) + 1
   })
@@ -70,7 +138,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center gap-2 text-gray-400 text-sm">
+      <div className="p-4 sm:p-8 flex items-center gap-2 text-gray-400 text-sm">
         <span className="animate-spin inline-block w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full" />
         Cargando...
       </div>
@@ -78,14 +146,50 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl">
       <div className="mb-7">
         <h2 className="text-xl font-semibold text-gray-900">Dashboard</h2>
         <p className="text-gray-500 text-sm mt-0.5">Resumen de tus finanzas</p>
       </div>
 
+      {/* Monthly income */}
+      <div className="bg-white rounded-lg border border-gray-200 p-5 mb-6">
+        <p className="text-sm font-medium text-gray-700 mb-3">
+          Ingreso de {MONTHS[now.getMonth()]} {now.getFullYear()}
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[140px]">
+            <label className={labelCls}>Monto</label>
+            <input
+              type="number" step="0.01" min="0.01"
+              value={incomeAmount}
+              onChange={e => setIncomeAmount(e.target.value)}
+              className={inputCls}
+              placeholder="0.00"
+            />
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <label className={labelCls}>Moneda</label>
+            <select value={incomeCurrency} onChange={e => setIncomeCurrency(e.target.value)} className={inputCls}>
+              {currencies.map(c => (
+                <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={handleIncomeSave}
+            disabled={incomeSaving || !incomeAmount}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 w-full sm:w-auto"
+          >
+            {incomeSaving ? 'Guardando...' : income ? 'Actualizar' : 'Guardar'}
+          </button>
+        </div>
+        {incomeError && <p className="text-red-600 text-sm mt-2">{incomeError}</p>}
+        {incomeSaved && !incomeError && <p className="text-green-600 text-sm mt-2">Ingreso guardado</p>}
+      </div>
+
       {/* Cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <StatCard
           label="Total este mes"
           value={`$${totalThisMonth.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`}
@@ -141,16 +245,16 @@ export default function DashboardPage() {
         ) : (
           <div className="divide-y divide-gray-50">
             {recent.map(e => (
-              <div key={e.id} className="px-6 py-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-800">
+              <div key={e.id} className="px-6 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-800 truncate">
                     {e.description || <span className="text-gray-400 italic">Sin descripción</span>}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">
                     {e.category?.name ?? 'Sin categoría'} · {e.date}
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex-shrink-0">
                   <p className="text-sm font-medium text-gray-900">
                     {e.currency?.symbol}{Number(e.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                   </p>

@@ -1,31 +1,39 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type FormEvent, type ReactNode } from 'react'
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../api/categories'
+import { getErrorMessage } from '../api/client'
 import { Plus, Pencil, Trash2, X, Lock } from 'lucide-react'
+import type { Category, CategoryRequest } from '../types'
 
-const EMPTY = { name: '', color: '#6366f1', icon: '' }
+const EMPTY: CategoryRequest = { name: '', color: '#6366f1', icon: '' }
 
-function Modal({ title, onClose, children }) {
+interface ModalProps {
+  title: string
+  onClose: () => void
+  children: ReactNode
+}
+
+function Modal({ title, onClose, children }: ModalProps) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X size={18} />
           </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-6 py-5 overflow-y-auto">{children}</div>
       </div>
     </div>
   )
 }
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading,    setLoading]    = useState(true)
   const [modal,      setModal]      = useState(false)
-  const [editing,    setEditing]    = useState(null)
-  const [form,       setForm]       = useState(EMPTY)
+  const [editing,    setEditing]    = useState<Category | null>(null)
+  const [form,       setForm]       = useState<CategoryRequest>(EMPTY)
   const [saving,     setSaving]     = useState(false)
   const [error,      setError]      = useState('')
 
@@ -45,14 +53,14 @@ export default function CategoriesPage() {
     setModal(true)
   }
 
-  const openEdit = (cat) => {
+  const openEdit = (cat: Category) => {
     setEditing(cat)
     setForm({ name: cat.name, color: cat.color ?? '#6366f1', icon: cat.icon ?? '' })
     setError('')
     setModal(true)
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setSaving(true)
     setError('')
@@ -62,13 +70,13 @@ export default function CategoriesPage() {
       setModal(false)
       load()
     } catch (err) {
-      setError(err.response?.data?.error ?? 'Error al guardar')
+      setError(getErrorMessage(err, 'Error al guardar'))
     } finally {
       setSaving(false)
     }
   }
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('¿Eliminar esta categoría?')) return
     await deleteCategory(id)
     load()
@@ -81,8 +89,8 @@ export default function CategoriesPage() {
   const custom     = categories.filter(c => !c.isDefault)
 
   return (
-    <div className="p-8 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Categorías</h2>
           <p className="text-gray-500 text-sm mt-0.5">{categories.length} categorías</p>
@@ -105,7 +113,7 @@ export default function CategoriesPage() {
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
               Predeterminadas
             </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {defaults.map(cat => (
                 <div key={cat.id}
                   className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-3">
@@ -130,7 +138,7 @@ export default function CategoriesPage() {
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
                 Personalizadas
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {custom.map(cat => (
                   <div key={cat.id}
                     className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between group hover:border-gray-300 transition-colors">
