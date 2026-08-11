@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Receipt, Repeat, Tag, CreditCard, LogOut, type LucideIcon } from 'lucide-react'
+import { LayoutDashboard, Receipt, Repeat, ListChecks, Tag, CreditCard, LogOut, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 interface NavItem {
@@ -12,6 +12,7 @@ const nav: NavItem[] = [
   { to: '/dashboard',           icon: LayoutDashboard, label: 'Dashboard'        },
   { to: '/expenses',            icon: Receipt,         label: 'Gastos'           },
   { to: '/recurring-expenses',  icon: Repeat,          label: 'Gastos fijos'     },
+  { to: '/planning',            icon: ListChecks,      label: 'Planificación'    },
   { to: '/categories',          icon: Tag,             label: 'Categorías'       },
   { to: '/payment-methods',     icon: CreditCard,      label: 'Métodos de pago'  },
 ]

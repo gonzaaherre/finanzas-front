@@ -1,11 +1,16 @@
 import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from 'react'
-import { getRecurringExpenses, createRecurringExpense, cancelRecurringExpense } from '../api/recurringExpenses'
+import {
+  getRecurringExpenses, createRecurringExpense, updateRecurringExpense, cancelRecurringExpense,
+} from '../api/recurringExpenses'
 import { getCategories } from '../api/categories'
 import { getPaymentMethods } from '../api/paymentMethods'
 import { getCurrencies } from '../api/currencies'
 import { getErrorMessage } from '../api/client'
-import { Plus, X, Ban } from 'lucide-react'
-import type { Category, Currency, PaymentMethod, RecurringExpense, RecurringExpenseRequest, ExpenseType } from '../types'
+import { Plus, Pencil, X, Ban } from 'lucide-react'
+import type {
+  Category, Currency, PaymentMethod, RecurringExpense,
+  RecurringExpenseRequest, RecurringExpenseUpdateRequest, ExpenseType,
+} from '../types'
 
 interface RecurringExpenseFormState {
   amount: string
@@ -56,6 +61,7 @@ export default function RecurringExpensesPage() {
   const [currencies,     setCurrencies]     = useState<Currency[]>([])
   const [loading, setLoading] = useState(true)
   const [modal,   setModal]   = useState(false)
+  const [editing, setEditing] = useState<RecurringExpense | null>(null)
   const [form,    setForm]    = useState<RecurringExpenseFormState>(EMPTY)
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
@@ -77,7 +83,26 @@ export default function RecurringExpensesPage() {
   }, [loadMeta, loadRecurring])
 
   const openNew = () => {
+    setEditing(null)
     setForm({ ...EMPTY, currencyCode: currencies[0]?.code ?? 'ARS' })
+    setError('')
+    setModal(true)
+  }
+
+  const openEdit = (r: RecurringExpense) => {
+    setEditing(r)
+    setForm({
+      amount: String(r.amount),
+      type: r.type,
+      description: r.description ?? '',
+      categoryId: r.category?.id ?? '',
+      paymentMethodId: r.paymentMethod?.id ?? '',
+      currencyCode: r.currency?.code ?? 'ARS',
+      dayOfMonth: String(r.dayOfMonth),
+      startDate: r.startDate,
+      hasInstallments: r.totalInstallments != null,
+      totalInstallments: r.totalInstallments != null ? String(r.totalInstallments) : '',
+    })
     setError('')
     setModal(true)
   }
@@ -87,18 +112,31 @@ export default function RecurringExpensesPage() {
     setSaving(true)
     setError('')
     try {
-      const payload: RecurringExpenseRequest = {
-        amount: parseFloat(form.amount),
-        type: form.type,
-        description: form.description || null,
-        categoryId: form.categoryId || null,
-        paymentMethodId: form.paymentMethodId || null,
-        currencyCode: form.currencyCode,
-        dayOfMonth: parseInt(form.dayOfMonth, 10),
-        startDate: form.startDate,
-        totalInstallments: form.hasInstallments ? parseInt(form.totalInstallments, 10) : null,
+      if (editing) {
+        const payload: RecurringExpenseUpdateRequest = {
+          amount: parseFloat(form.amount),
+          type: form.type,
+          description: form.description || null,
+          categoryId: form.categoryId || null,
+          paymentMethodId: form.paymentMethodId || null,
+          currencyCode: form.currencyCode,
+          dayOfMonth: parseInt(form.dayOfMonth, 10),
+        }
+        await updateRecurringExpense(editing.id, payload)
+      } else {
+        const payload: RecurringExpenseRequest = {
+          amount: parseFloat(form.amount),
+          type: form.type,
+          description: form.description || null,
+          categoryId: form.categoryId || null,
+          paymentMethodId: form.paymentMethodId || null,
+          currencyCode: form.currencyCode,
+          dayOfMonth: parseInt(form.dayOfMonth, 10),
+          startDate: form.startDate,
+          totalInstallments: form.hasInstallments ? parseInt(form.totalInstallments, 10) : null,
+        }
+        await createRecurringExpense(payload)
       }
-      await createRecurringExpense(payload)
       setModal(false)
       loadRecurring()
     } catch (err) {
@@ -207,7 +245,11 @@ export default function RecurringExpensesPage() {
                 </td>
                 <td className="px-4 py-3">
                   {r.active && (
-                    <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEdit(r)}
+                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors">
+                        <Pencil size={13} />
+                      </button>
                       <button onClick={() => handleCancel(r.id)}
                         className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
                         <Ban size={13} />
@@ -223,7 +265,7 @@ export default function RecurringExpensesPage() {
 
       {/* Modal */}
       {modal && (
-        <Modal title="Nuevo gasto fijo" onClose={() => setModal(false)}>
+        <Modal title={editing ? 'Editar gasto fijo' : 'Nuevo gasto fijo'} onClose={() => setModal(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -272,7 +314,8 @@ export default function RecurringExpensesPage() {
               <label className={labelCls}>Fecha de inicio *</label>
               <input type="date" value={form.startDate}
                 onChange={e => setForm({ ...form, startDate: e.target.value })}
-                className={inputCls} required />
+                className={inputCls} disabled={!!editing} required />
+              {editing && <p className="text-xs text-gray-400 mt-1">No se puede modificar</p>}
             </div>
 
             <div>
@@ -298,7 +341,8 @@ export default function RecurringExpensesPage() {
             <div>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={form.hasInstallments}
-                  onChange={e => setForm({ ...form, hasInstallments: e.target.checked })} />
+                  onChange={e => setForm({ ...form, hasInstallments: e.target.checked })}
+                  disabled={!!editing} />
                 ¿Tiene una cantidad fija de cuotas?
               </label>
               {form.hasInstallments && (
@@ -306,7 +350,7 @@ export default function RecurringExpensesPage() {
                   <label className={labelCls}>Cantidad de cuotas *</label>
                   <input type="number" min="1" value={form.totalInstallments}
                     onChange={e => setForm({ ...form, totalInstallments: e.target.value })}
-                    className={inputCls} placeholder="Ej: 6" required />
+                    className={inputCls} placeholder="Ej: 6" disabled={!!editing} required />
                   {perInstallmentPreview !== null && (
                     <p className="text-xs text-gray-400 mt-1.5">
                       ≈ {selectedCurrency?.symbol}{perInstallmentPreview.toLocaleString('es-AR', { minimumFractionDigits: 2 })} por cuota
@@ -314,6 +358,7 @@ export default function RecurringExpensesPage() {
                   )}
                 </div>
               )}
+              {editing && <p className="text-xs text-gray-400 mt-1">No se puede modificar</p>}
             </div>
 
             {error && <p className="text-red-600 text-sm">{error}</p>}

@@ -9,6 +9,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import DashboardPage from './pages/DashboardPage'
 import ExpensesPage from './pages/ExpensesPage'
 import RecurringExpensesPage from './pages/RecurringExpensesPage'
+import PlanningPage from './pages/PlanningPage'
 import CategoriesPage from './pages/CategoriesPage'
 import PaymentMethodsPage from './pages/PaymentMethodsPage'
 
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/recurring-expenses" element={<RecurringExpensesPage />} />
+              <Route path="/planning" element={<PlanningPage />} />
               <Route path="/categories" element={<CategoriesPage />} />
               <Route path="/payment-methods" element={<PaymentMethodsPage />} />
             </Route>

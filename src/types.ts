@@ -97,6 +97,16 @@ export interface RecurringExpenseRequest {
   totalInstallments?: number | null
 }
 
+export interface RecurringExpenseUpdateRequest {
+  amount: number
+  type: ExpenseType
+  description?: string | null
+  categoryId?: string | null
+  paymentMethodId?: string | null
+  currencyCode: string
+  dayOfMonth: number
+}
+
 export interface ExpenseRequest {
   amount: number
   type: ExpenseType
@@ -128,6 +138,39 @@ export interface MonthlyIncome {
 export interface MonthlyIncomeRequest {
   amount: number
   currencyCode: string
+}
+
+export type PlannedExpenseStatus = 'PLANNED' | 'PAID'
+
+export interface PlannedExpense {
+  id: string
+  amount: number
+  type: ExpenseType
+  description: string | null
+  year: number
+  month: number
+  status: PlannedExpenseStatus
+  category: Category | null
+  paymentMethod: PaymentMethod | null
+  currency: Currency
+  expenseId: string | null
+  createdAt: string
+}
+
+export interface PlannedExpenseRequest {
+  amount: number
+  type: ExpenseType
+  description?: string | null
+  year: number
+  month: number
+  categoryId?: string | null
+  paymentMethodId?: string | null
+  currencyCode: string
+}
+
+export interface MarkPaidRequest {
+  date?: string
+  amount?: number
 }
 
 export interface ForgotPasswordRequest {
