@@ -17,7 +17,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       const { data } = await register(form)
-      authLogin(data.token, { email: data.email, name: data.name })
+      authLogin(data.token, data.refreshToken, { email: data.email, name: data.name })
       navigate('/dashboard')
     } catch (err) {
       setError(getErrorMessage(err, 'Error al registrarse'))

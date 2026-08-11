@@ -58,8 +58,16 @@ export interface User {
   name: string
 }
 
+export interface UserResponse {
+  id: string
+  email: string
+  name: string
+  createdAt: string
+}
+
 export interface AuthResponse {
   token: string
+  refreshToken: string
   email: string
   name: string
 }

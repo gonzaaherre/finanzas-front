@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const { data } = await login(form)
-      authLogin(data.token, { email: data.email, name: data.name })
+      authLogin(data.token, data.refreshToken, { email: data.email, name: data.name })
       navigate('/dashboard')
     } catch (err) {
       setError(getErrorMessage(err, 'Error al iniciar sesión'))

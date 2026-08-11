@@ -20,3 +20,6 @@ export const forgotPassword = (data: ForgotPasswordRequest): Promise<AxiosRespon
 
 export const resetPassword = (data: ResetPasswordRequest): Promise<AxiosResponse<MessageResponse>> =>
   client.post('/auth/reset-password', data)
+
+export const logout = (refreshToken: string): Promise<AxiosResponse<MessageResponse>> =>
+  client.post('/auth/logout', { refreshToken })
