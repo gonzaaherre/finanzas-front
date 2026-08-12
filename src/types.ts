@@ -43,6 +43,7 @@ export interface Expense {
   type: ExpenseType
   description: string | null
   date: string
+  paid: boolean
   createdAt: string
   updatedAt: string
   category: Category | null
@@ -131,6 +132,7 @@ export interface ExpenseFilters {
   type?: ExpenseType
   categoryId?: string
   paymentMethodId?: string
+  paid?: boolean
 }
 
 export interface MonthlyIncome {

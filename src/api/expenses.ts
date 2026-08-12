@@ -13,3 +13,12 @@ export const updateExpense = (id: string, data: ExpenseRequest): Promise<AxiosRe
 
 export const deleteExpense = (id: string): Promise<AxiosResponse<void>> =>
   client.delete(`/expenses/${id}`)
+
+export const markExpensePaid = (
+  id: string,
+  data?: { date?: string; amount?: number },
+): Promise<AxiosResponse<Expense>> =>
+  client.post(`/expenses/${id}/mark-paid`, data ?? {})
+
+export const unmarkExpensePaid = (id: string): Promise<AxiosResponse<Expense>> =>
+  client.post(`/expenses/${id}/unmark-paid`)

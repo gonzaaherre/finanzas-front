@@ -4,7 +4,7 @@ import { getExpenses } from '../api/expenses'
 import { getCurrencies } from '../api/currencies'
 import { getMonthlyIncome, saveMonthlyIncome } from '../api/incomes'
 import { getErrorMessage } from '../api/client'
-import { TrendingUp, Receipt, Tag, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TrendingUp, Receipt, Tag, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
@@ -23,16 +23,17 @@ interface StatCardProps {
   label: string
   value: string | number
   icon: ComponentType<{ size?: number; className?: string }>
+  accent?: string
 }
 
-function StatCard({ label, value, icon: Icon }: StatCardProps) {
+function StatCard({ label, value, icon: Icon, accent = 'text-gray-900' }: StatCardProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-3">
         <p className="text-sm text-gray-500">{label}</p>
         <Icon size={15} className="text-gray-400" />
       </div>
-      <p className="text-2xl font-semibold text-gray-900">{value}</p>
+      <p className={`text-2xl font-semibold ${accent}`}>{value}</p>
     </div>
   )
 }
@@ -131,20 +132,26 @@ export default function DashboardPage() {
       return d.getMonth() === viewMonth && d.getFullYear() === viewYear
     })
 
-  const totalMonth = monthExpenses.reduce((s, e) => s + Number(e.amount), 0)
+  // Solo lo pagado cuenta como gasto; lo pendiente (ocurrencias de gastos fijos
+  // sin pagar) se muestra aparte y no suma al total ni al gráfico.
+  const paidMonthExpenses = monthExpenses.filter(e => e.paid)
+  const pendingMonthExpenses = monthExpenses.filter(e => !e.paid)
+
+  const totalMonth = paidMonthExpenses.reduce((s, e) => s + Number(e.amount), 0)
+  const pendingMonth = pendingMonthExpenses.reduce((s, e) => s + Number(e.amount), 0)
 
   const chartData = MONTHS.map((name, i) => ({
     name,
     total: expenses
       .filter(e => {
         const d = new Date(e.date)
-        return d.getMonth() === i && d.getFullYear() === today.getFullYear()
+        return e.paid && d.getMonth() === i && d.getFullYear() === today.getFullYear()
       })
       .reduce((s, e) => s + Number(e.amount), 0),
   }))
 
   const categoryCount: Record<string, number> = {}
-  monthExpenses.forEach(e => {
+  paidMonthExpenses.forEach(e => {
     if (e.category) categoryCount[e.category.name] = (categoryCount[e.category.name] || 0) + 1
   })
   const topCategory = Object.entries(categoryCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—'
@@ -229,15 +236,21 @@ export default function DashboardPage() {
       </div>
 
       {/* Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
-          label="Total del mes"
+          label="Gastado del mes"
           value={`$${totalMonth.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`}
           icon={TrendingUp}
         />
         <StatCard
+          label="Pendiente de pago"
+          value={`$${pendingMonth.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`}
+          icon={Clock}
+          accent={pendingMonth > 0 ? 'text-amber-600' : 'text-gray-900'}
+        />
+        <StatCard
           label="Gastos del mes"
-          value={monthExpenses.length}
+          value={paidMonthExpenses.length}
           icon={Receipt}
         />
         <StatCard
@@ -278,13 +291,13 @@ export default function DashboardPage() {
         <div className="px-6 py-4 border-b border-gray-100">
           <p className="text-sm font-medium text-gray-700">Gastos de {MONTHS_FULL[viewMonth]} {viewYear}</p>
         </div>
-        {monthExpenses.length === 0 ? (
+        {paidMonthExpenses.length === 0 ? (
           <p className="px-6 py-10 text-center text-gray-400 text-sm">
             No hay gastos registrados en este mes
           </p>
         ) : (
           <div className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto">
-            {monthExpenses.map(e => (
+            {paidMonthExpenses.map(e => (
               <div key={e.id} className="px-6 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm text-gray-800 truncate">

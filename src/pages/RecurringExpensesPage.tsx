@@ -2,15 +2,36 @@ import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from
 import {
   getRecurringExpenses, createRecurringExpense, updateRecurringExpense, cancelRecurringExpense,
 } from '../api/recurringExpenses'
+import { getExpenses, markExpensePaid, unmarkExpensePaid } from '../api/expenses'
 import { getCategories } from '../api/categories'
 import { getPaymentMethods } from '../api/paymentMethods'
 import { getCurrencies } from '../api/currencies'
 import { getErrorMessage } from '../api/client'
-import { Plus, Pencil, X, Ban } from 'lucide-react'
+import { Plus, Pencil, X, Ban, Check } from 'lucide-react'
 import type {
-  Category, Currency, PaymentMethod, RecurringExpense,
+  Category, Currency, Expense, PaymentMethod, RecurringExpense,
   RecurringExpenseRequest, RecurringExpenseUpdateRequest, ExpenseType,
 } from '../types'
+
+const MONTH_NAMES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+]
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+// Rango [primer día, último día] del mes actual en formato YYYY-MM-DD.
+function currentMonthRange() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  const lastDay = new Date(y, m + 1, 0).getDate()
+  return {
+    from: `${y}-${pad2(m + 1)}-01`,
+    to: `${y}-${pad2(m + 1)}-${pad2(lastDay)}`,
+    label: MONTH_NAMES[m],
+  }
+}
 
 interface RecurringExpenseFormState {
   amount: string
@@ -65,6 +86,11 @@ export default function RecurringExpensesPage() {
   const [form,    setForm]    = useState<RecurringExpenseFormState>(EMPTY)
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
+  // Ocurrencia del mes actual por gasto fijo (recurringExpenseId -> Expense).
+  const [monthOccurrences, setMonthOccurrences] = useState<Record<string, Expense>>({})
+  const [payingId, setPayingId] = useState<string | null>(null)
+
+  const month = currentMonthRange()
 
   const loadMeta = useCallback(async () => {
     const [cat, pm, cur] = await Promise.all([getCategories(), getPaymentMethods(), getCurrencies()])
@@ -78,9 +104,33 @@ export default function RecurringExpensesPage() {
     setRecurringExpenses(data)
   }, [])
 
+  const loadOccurrences = useCallback(async () => {
+    const { from, to } = currentMonthRange()
+    // Sin filtro paid: necesitamos tanto las pagadas como las pendientes del mes.
+    const { data } = await getExpenses({ from, to })
+    const map: Record<string, Expense> = {}
+    data.forEach(e => { if (e.recurringExpenseId) map[e.recurringExpenseId] = e })
+    setMonthOccurrences(map)
+  }, [])
+
   useEffect(() => {
-    Promise.all([loadMeta(), loadRecurring()]).finally(() => setLoading(false))
-  }, [loadMeta, loadRecurring])
+    Promise.all([loadMeta(), loadRecurring(), loadOccurrences()]).finally(() => setLoading(false))
+  }, [loadMeta, loadRecurring, loadOccurrences])
+
+  const handleTogglePaid = async (occ: Expense) => {
+    setPayingId(occ.id)
+    try {
+      if (occ.paid) await unmarkExpensePaid(occ.id)
+      else await markExpensePaid(occ.id)
+      await loadOccurrences()
+    } catch (err) {
+      alert(getErrorMessage(err, 'Error al actualizar el pago'))
+    } finally {
+      setPayingId(null)
+    }
+  }
+
+  const pendingThisMonth = Object.values(monthOccurrences).filter(o => !o.paid).length
 
   const openNew = () => {
     setEditing(null)
@@ -139,6 +189,7 @@ export default function RecurringExpensesPage() {
       }
       setModal(false)
       loadRecurring()
+      loadOccurrences()
     } catch (err) {
       setError(getErrorMessage(err, 'Error al guardar'))
     } finally {
@@ -150,6 +201,7 @@ export default function RecurringExpensesPage() {
     if (!confirm('¿Cancelar este gasto fijo? Se eliminarán las cuotas futuras ya generadas.')) return
     await cancelRecurringExpense(id)
     loadRecurring()
+    loadOccurrences()
   }
 
   const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
@@ -167,7 +219,12 @@ export default function RecurringExpensesPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Gastos fijos</h2>
-          <p className="text-gray-500 text-sm mt-0.5">{recurringExpenses.length} gastos fijos</p>
+          <p className="text-gray-500 text-sm mt-0.5">
+            {recurringExpenses.length} gastos fijos
+            {pendingThisMonth > 0 && (
+              <span className="text-amber-600"> · {pendingThisMonth} sin pagar en {month.label}</span>
+            )}
+          </p>
         </div>
         <button
           onClick={openNew}
@@ -188,6 +245,7 @@ export default function RecurringExpensesPage() {
               <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Método de pago</th>
               <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Día del mes</th>
               <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Cuotas</th>
+              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">{month.label}</th>
               <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
               <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
               <th className="px-4 py-3 w-16"></th>
@@ -196,11 +254,11 @@ export default function RecurringExpensesPage() {
           <tbody className="divide-y divide-gray-50">
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-6 py-10 text-center text-gray-400 text-sm">Cargando...</td>
+                <td colSpan={9} className="px-6 py-10 text-center text-gray-400 text-sm">Cargando...</td>
               </tr>
             ) : recurringExpenses.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-10 text-center text-gray-400 text-sm">
+                <td colSpan={9} className="px-6 py-10 text-center text-gray-400 text-sm">
                   No hay gastos fijos. ¡Creá el primero!
                 </td>
               </tr>
@@ -224,6 +282,32 @@ export default function RecurringExpensesPage() {
                 <td className="px-6 py-3 text-gray-500 tabular-nums">{r.dayOfMonth}</td>
                 <td className="px-6 py-3 text-gray-600">
                   {r.totalInstallments ? `${r.totalInstallments} cuotas` : 'Indefinido'}
+                </td>
+                <td className="px-6 py-3">
+                  {(() => {
+                    const occ = monthOccurrences[r.id]
+                    if (!r.active) return <span className="text-gray-400">—</span>
+                    if (!occ) return <span className="text-gray-400 text-xs">Sin cuota</span>
+                    if (occ.paid) {
+                      return (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700">
+                            Pagado
+                          </span>
+                          <button onClick={() => handleTogglePaid(occ)} disabled={payingId === occ.id}
+                            className="text-xs text-gray-400 hover:text-gray-700 hover:underline disabled:opacity-50">
+                            Deshacer
+                          </button>
+                        </span>
+                      )
+                    }
+                    return (
+                      <button onClick={() => handleTogglePaid(occ)} disabled={payingId === occ.id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50">
+                        <Check size={12} /> Marcar pagado
+                      </button>
+                    )
+                  })()}
                 </td>
                 <td className="px-6 py-3">
                   <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${

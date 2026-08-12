@@ -86,7 +86,9 @@ export default function ExpensesPage() {
   }, [])
 
   const loadExpenses = useCallback(async (params: ExpenseFilters = {}) => {
-    const { data } = await getExpenses(params)
+    // Solo gastos ya pagados: las ocurrencias pendientes de gastos fijos no cuentan
+    // como gasto hasta marcarlas pagadas desde la vista de Gastos fijos.
+    const { data } = await getExpenses({ ...params, paid: true })
     setExpenses(data)
   }, [])
 
