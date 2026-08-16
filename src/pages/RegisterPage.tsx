@@ -3,6 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { register } from '../api/auth'
 import { getErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import AuthLayout from '../components/AuthLayout'
+import Field from '../components/ui/Field'
+import Input from '../components/ui/Input'
+import Button from '../components/ui/Button'
 
 export default function RegisterPage() {
   const [form, setForm]       = useState({ name: '', email: '', password: '' })
@@ -27,66 +31,34 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm w-full max-w-sm p-6 sm:p-8">
-        <div className="mb-7">
-          <h2 className="text-xl font-semibold text-gray-900">Crear cuenta</h2>
-          <p className="text-gray-500 text-sm mt-1">Registrate para empezar</p>
-        </div>
+    <AuthLayout
+      title="Crear cuenta"
+      subtitle="Registrate para empezar"
+      footer={<>¿Ya tenés cuenta? <Link to="/login" className="text-accent hover:brightness-110 font-medium">Iniciar sesión</Link></>}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Nombre">
+          <Input type="text" value={form.name}
+            onChange={e => setForm({ ...form, name: e.target.value })}
+            placeholder="Tu nombre" required />
+        </Field>
+        <Field label="Email">
+          <Input type="email" value={form.email}
+            onChange={e => setForm({ ...form, email: e.target.value })}
+            placeholder="tu@email.com" required />
+        </Field>
+        <Field label="Contraseña">
+          <Input type="password" value={form.password}
+            onChange={e => setForm({ ...form, password: e.target.value })}
+            placeholder="Mínimo 6 caracteres" required />
+        </Field>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Tu nombre"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={e => setForm({ ...form, email: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="tu@email.com"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Contraseña</label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={e => setForm({ ...form, password: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Mínimo 6 caracteres"
-              required
-            />
-          </div>
+        {error && <p className="text-negative text-sm">{error}</p>}
 
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Registrando...' : 'Crear cuenta'}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-gray-500 mt-6">
-          ¿Ya tenés cuenta?{' '}
-          <Link to="/login" className="text-blue-600 hover:underline font-medium">
-            Iniciar sesión
-          </Link>
-        </p>
-      </div>
-    </div>
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading ? 'Registrando...' : 'Crear cuenta'}
+        </Button>
+      </form>
+    </AuthLayout>
   )
 }

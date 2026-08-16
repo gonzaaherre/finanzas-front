@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import {
   getPlannedExpenses, createPlannedExpense, updatePlannedExpense, deletePlannedExpense,
   markPlannedExpensePaid, unmarkPlannedExpensePaid, copyPlannedExpensesFromPrevious,
@@ -7,11 +7,21 @@ import { getCategories } from '../api/categories'
 import { getPaymentMethods } from '../api/paymentMethods'
 import { getCurrencies } from '../api/currencies'
 import { getErrorMessage } from '../api/client'
-import { Plus, Pencil, Trash2, Check, Undo2, Copy, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, Undo2, Copy, ListChecks } from 'lucide-react'
 import type {
   Category, Currency, PaymentMethod, PlannedExpense,
   PlannedExpenseRequest, ExpenseType,
 } from '../types'
+import Card from '../components/ui/Card'
+import Button from '../components/ui/Button'
+import Modal from '../components/ui/Modal'
+import Field from '../components/ui/Field'
+import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
+import Money from '../components/ui/Money'
+import EmptyState from '../components/ui/EmptyState'
+import { Badge } from '../components/ui/Badge'
+import { fieldCls } from '../components/ui/Input'
 
 interface PlannedExpenseFormState {
   amount: string
@@ -27,31 +37,11 @@ const EMPTY: PlannedExpenseFormState = {
   categoryId: '', paymentMethodId: '', currencyCode: 'ARS',
 }
 
+const thCls = 'text-left px-6 py-3 text-xs font-medium text-fg-muted uppercase tracking-wider'
+
 function currentYearMonth(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-interface ModalProps {
-  title: string
-  onClose: () => void
-  children: ReactNode
-}
-
-function Modal({ title, onClose, children }: ModalProps) {
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="px-6 py-5 overflow-y-auto">{children}</div>
-      </div>
-    </div>
-  )
 }
 
 export default function PlanningPage() {
@@ -203,117 +193,97 @@ export default function PlanningPage() {
     }
   }
 
-  const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-  const labelCls = 'block text-xs font-medium text-gray-700 mb-1.5'
-
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8 w-full">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Planificación</h2>
-          <p className="text-gray-500 text-sm mt-0.5">{plannedExpenses.length} ítems planificados</p>
+          <h2 className="text-2xl font-display font-semibold text-fg tracking-tight">Planificación</h2>
+          <p className="text-fg-muted text-sm mt-0.5">{plannedExpenses.length} ítems planificados</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="month"
             value={yearMonth}
             onChange={e => setYearMonth(e.target.value)}
-            className={inputCls + ' w-auto'}
+            className={fieldCls + ' w-auto'}
           />
-          <button
-            onClick={handleCopyFromPrevious}
-            disabled={copying}
-            className="flex items-center gap-2 border border-gray-200 text-gray-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
+          <Button variant="subtle" onClick={handleCopyFromPrevious} disabled={copying}>
             <Copy size={15} />
             {copying ? 'Copiando...' : 'Copiar del mes anterior'}
-          </button>
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
+          </Button>
+          <Button onClick={openNew}>
             <Plus size={15} />
             Nueva planificación
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+      <Card className="overflow-x-auto">
         <table className="w-full text-sm min-w-[820px]">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Método de pago</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-              <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
+            <tr className="bg-surface-2 border-b border-line">
+              <th className={thCls}>Descripción</th>
+              <th className={thCls}>Categoría</th>
+              <th className={thCls}>Método de pago</th>
+              <th className={thCls}>Estado</th>
+              <th className={thCls + ' text-right'}>Monto</th>
               <th className="px-4 py-3 w-24"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-line">
             {loading ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-10 text-center text-gray-400 text-sm">Cargando...</td>
-              </tr>
+              <tr><td colSpan={6} className="px-6 py-10 text-center text-fg-muted text-sm">Cargando...</td></tr>
             ) : plannedExpenses.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-10 text-center text-gray-400 text-sm">
-                  No hay ítems planificados para este mes. ¡Creá el primero!
-                </td>
-              </tr>
+              <tr><td colSpan={6} className="p-0">
+                <EmptyState icon={ListChecks} title="Sin ítems planificados" description="Planificá tus gastos de este mes o copialos del anterior."
+                  action={<Button size="sm" onClick={openNew}><Plus size={14} />Nueva planificación</Button>} />
+              </td></tr>
             ) : plannedExpenses.map(p => (
-              <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
-                <td className="px-6 py-3 text-gray-800">
-                  {p.description || <span className="text-gray-400 italic">Sin descripción</span>}
+              <tr key={p.id} className="hover:bg-surface-2/60 transition-colors group">
+                <td className="px-6 py-3 text-fg">
+                  {p.description || <span className="text-fg-muted italic">Sin descripción</span>}
                 </td>
                 <td className="px-6 py-3">
                   {p.category ? (
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ background: p.category.color ?? '#94a3b8' }} />
-                      <span className="text-gray-600">{p.category.name}</span>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.category.color ?? 'var(--fg-muted)' }} />
+                      <span className="text-fg-muted">{p.category.name}</span>
                     </span>
-                  ) : <span className="text-gray-400">—</span>}
+                  ) : <span className="text-fg-muted">—</span>}
                 </td>
-                <td className="px-6 py-3 text-gray-600">
-                  {p.paymentMethod?.name ?? <span className="text-gray-400">—</span>}
+                <td className="px-6 py-3 text-fg-muted">
+                  {p.paymentMethod?.name ?? <span className="text-fg-muted">—</span>}
                 </td>
                 <td className="px-6 py-3">
-                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                    p.status === 'PAID' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
+                  <Badge tone={p.status === 'PAID' ? 'accent' : 'neutral'}>
                     {p.status === 'PAID' ? 'Pagado' : 'Planeado'}
-                  </span>
+                  </Badge>
                 </td>
-                <td className="px-6 py-3 text-right tabular-nums">
-                  <div className="font-medium text-gray-900">
-                    {p.currency?.symbol}{Number(p.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                  </div>
+                <td className="px-6 py-3 text-right">
+                  <Money value={Number(p.amount)} symbol={p.currency?.symbol ?? '$'} className="text-fg font-medium" />
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     {p.status === 'PLANNED' ? (
                       <>
                         <button onClick={() => openPayModal(p)}
-                          className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                          title="Marcar pagado">
+                          className="p-1.5 text-fg-muted hover:text-positive hover:bg-positive/10 rounded transition-colors" title="Marcar pagado">
                           <Check size={13} />
                         </button>
                         <button onClick={() => openEdit(p)}
-                          className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors">
+                          className="p-1.5 text-fg-muted hover:text-fg hover:bg-surface-2 rounded transition-colors">
                           <Pencil size={13} />
                         </button>
                         <button onClick={() => handleDelete(p)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
+                          className="p-1.5 text-fg-muted hover:text-negative hover:bg-negative/10 rounded transition-colors">
                           <Trash2 size={13} />
                         </button>
                       </>
                     ) : (
                       <button onClick={() => handleUnmark(p)}
-                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                        title="Desmarcar pagado">
+                        className="p-1.5 text-fg-muted hover:text-fg hover:bg-surface-2 rounded transition-colors" title="Desmarcar pagado">
                         <Undo2 size={13} />
                       </button>
                     )}
@@ -323,78 +293,55 @@ export default function PlanningPage() {
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* Add/Edit modal */}
       {modal && (
         <Modal title={editing ? 'Editar planificación' : 'Nueva planificación'} onClose={() => setModal(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Monto *</label>
-                <input type="number" step="0.01" min="0.01" value={form.amount}
-                  onChange={e => setForm({ ...form, amount: e.target.value })}
-                  className={inputCls} placeholder="0.00" required />
-              </div>
-              <div>
-                <label className={labelCls}>Moneda *</label>
-                <select value={form.currencyCode}
-                  onChange={e => setForm({ ...form, currencyCode: e.target.value })}
-                  className={inputCls}>
-                  {currencies.map(c => (
-                    <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
-                  ))}
-                </select>
-              </div>
+              <Field label="Monto" required>
+                <Input type="number" step="0.01" min="0.01" value={form.amount}
+                  onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0.00" required />
+              </Field>
+              <Field label="Moneda" required>
+                <Select value={form.currencyCode} onChange={e => setForm({ ...form, currencyCode: e.target.value })}>
+                  {currencies.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+                </Select>
+              </Field>
             </div>
 
-            <div>
-              <label className={labelCls}>Descripción</label>
-              <input type="text" value={form.description}
-                onChange={e => setForm({ ...form, description: e.target.value })}
-                className={inputCls} placeholder="Ej: Alquiler" />
-            </div>
+            <Field label="Descripción">
+              <Input type="text" value={form.description}
+                onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Ej: Alquiler" />
+            </Field>
 
-            <div>
-              <label className={labelCls}>Tipo *</label>
-              <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ExpenseType })}
-                className={inputCls}>
+            <Field label="Tipo" required>
+              <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ExpenseType })}>
                 <option value="PERSONAL">Personal</option>
                 <option value="WORK">Trabajo</option>
-              </select>
-            </div>
+              </Select>
+            </Field>
 
-            <div>
-              <label className={labelCls}>Categoría</label>
-              <select value={form.categoryId}
-                onChange={e => setForm({ ...form, categoryId: e.target.value })}
-                className={inputCls}>
+            <Field label="Categoría">
+              <Select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })}>
                 <option value="">Sin categoría</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
 
-            <div>
-              <label className={labelCls}>Método de pago</label>
-              <select value={form.paymentMethodId}
-                onChange={e => setForm({ ...form, paymentMethodId: e.target.value })}
-                className={inputCls}>
+            <Field label="Método de pago">
+              <Select value={form.paymentMethodId} onChange={e => setForm({ ...form, paymentMethodId: e.target.value })}>
                 <option value="">Sin método de pago</option>
                 {paymentMethods.map(pm => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
 
-            {error && <p className="text-red-600 text-sm">{error}</p>}
+            {error && <p className="text-negative text-sm">{error}</p>}
 
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-50 transition-colors">
-                Cancelar
-              </button>
-              <button type="submit" disabled={saving}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50">
-                {saving ? 'Guardando...' : 'Guardar'}
-              </button>
+              <Button type="button" variant="subtle" onClick={() => setModal(false)} className="flex-1">Cancelar</Button>
+              <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Guardando...' : 'Guardar'}</Button>
             </div>
           </form>
         </Modal>
@@ -404,33 +351,21 @@ export default function PlanningPage() {
       {payModal && (
         <Modal title="Marcar como pagado" onClose={() => setPayModal(null)}>
           <form onSubmit={handleConfirmPay} className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Esto va a crear un gasto real en <span className="font-medium">Gastos</span> con los datos de abajo.
+            <p className="text-sm text-fg-muted">
+              Esto va a crear un gasto real en <span className="font-medium text-fg">Gastos</span> con los datos de abajo.
             </p>
-            <div>
-              <label className={labelCls}>Fecha *</label>
-              <input type="date" value={payDate}
-                onChange={e => setPayDate(e.target.value)}
-                className={inputCls} required />
-            </div>
-            <div>
-              <label className={labelCls}>Monto pagado *</label>
-              <input type="number" step="0.01" min="0.01" value={payAmount}
-                onChange={e => setPayAmount(e.target.value)}
-                className={inputCls} required />
-            </div>
+            <Field label="Fecha" required>
+              <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} required />
+            </Field>
+            <Field label="Monto pagado" required>
+              <Input type="number" step="0.01" min="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)} required />
+            </Field>
 
-            {payError && <p className="text-red-600 text-sm">{payError}</p>}
+            {payError && <p className="text-negative text-sm">{payError}</p>}
 
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setPayModal(null)}
-                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-50 transition-colors">
-                Cancelar
-              </button>
-              <button type="submit" disabled={paying}
-                className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50">
-                {paying ? 'Guardando...' : 'Confirmar pago'}
-              </button>
+              <Button type="button" variant="subtle" onClick={() => setPayModal(null)} className="flex-1">Cancelar</Button>
+              <Button type="submit" disabled={paying} className="flex-1">{paying ? 'Guardando...' : 'Confirmar pago'}</Button>
             </div>
           </form>
         </Modal>

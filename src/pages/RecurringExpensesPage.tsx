@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import {
   getRecurringExpenses, createRecurringExpense, updateRecurringExpense, cancelRecurringExpense,
 } from '../api/recurringExpenses'
@@ -7,11 +7,21 @@ import { getCategories } from '../api/categories'
 import { getPaymentMethods } from '../api/paymentMethods'
 import { getCurrencies } from '../api/currencies'
 import { getErrorMessage } from '../api/client'
-import { Plus, Pencil, X, Ban, Check } from 'lucide-react'
+import { Plus, Pencil, Ban, Check, Repeat } from 'lucide-react'
 import type {
   Category, Currency, Expense, PaymentMethod, RecurringExpense,
   RecurringExpenseRequest, RecurringExpenseUpdateRequest, ExpenseType,
 } from '../types'
+import Card from '../components/ui/Card'
+import Button from '../components/ui/Button'
+import Modal from '../components/ui/Modal'
+import Field from '../components/ui/Field'
+import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
+import Money from '../components/ui/Money'
+import EmptyState from '../components/ui/EmptyState'
+import { Badge } from '../components/ui/Badge'
+import { amount as fmtAmount } from '../lib/format'
 
 const MONTH_NAMES = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -19,6 +29,7 @@ const MONTH_NAMES = [
 ]
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
+const thCls = 'text-left px-6 py-3 text-xs font-medium text-fg-muted uppercase tracking-wider'
 
 // Rango [primer día, último día] del mes actual en formato YYYY-MM-DD.
 function currentMonthRange() {
@@ -51,28 +62,6 @@ const EMPTY: RecurringExpenseFormState = {
   categoryId: '', paymentMethodId: '', currencyCode: 'ARS',
   dayOfMonth: '1', startDate: new Date().toISOString().split('T')[0],
   hasInstallments: false, totalInstallments: '',
-}
-
-interface ModalProps {
-  title: string
-  onClose: () => void
-  children: ReactNode
-}
-
-function Modal({ title, onClose, children }: ModalProps) {
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="px-6 py-5 overflow-y-auto">{children}</div>
-      </div>
-    </div>
-  )
 }
 
 export default function RecurringExpensesPage() {
@@ -204,9 +193,6 @@ export default function RecurringExpensesPage() {
     loadOccurrences()
   }
 
-  const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-  const labelCls = 'block text-xs font-medium text-gray-700 mb-1.5'
-
   const selectedCurrency = currencies.find(c => c.code === form.currencyCode)
   const perInstallmentPreview =
     form.hasInstallments && form.amount && form.totalInstallments
@@ -214,88 +200,79 @@ export default function RecurringExpensesPage() {
       : null
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8 w-full">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Gastos fijos</h2>
-          <p className="text-gray-500 text-sm mt-0.5">
+          <h2 className="text-2xl font-display font-semibold text-fg tracking-tight">Gastos fijos</h2>
+          <p className="text-fg-muted text-sm mt-0.5">
             {recurringExpenses.length} gastos fijos
             {pendingThisMonth > 0 && (
-              <span className="text-amber-600"> · {pendingThisMonth} sin pagar en {month.label}</span>
+              <span className="text-warning"> · {pendingThisMonth} sin pagar en {month.label}</span>
             )}
           </p>
         </div>
-        <button
-          onClick={openNew}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
+        <Button onClick={openNew}>
           <Plus size={15} />
           Nuevo gasto fijo
-        </button>
+        </Button>
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+      <Card className="overflow-x-auto">
         <table className="w-full text-sm min-w-[820px]">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Método de pago</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Día del mes</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Cuotas</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">{month.label}</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-              <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
+            <tr className="bg-surface-2 border-b border-line">
+              <th className={thCls}>Descripción</th>
+              <th className={thCls}>Categoría</th>
+              <th className={thCls}>Método de pago</th>
+              <th className={thCls}>Día del mes</th>
+              <th className={thCls}>Cuotas</th>
+              <th className={thCls}>{month.label}</th>
+              <th className={thCls}>Estado</th>
+              <th className={thCls + ' text-right'}>Monto</th>
               <th className="px-4 py-3 w-16"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-line">
             {loading ? (
-              <tr>
-                <td colSpan={9} className="px-6 py-10 text-center text-gray-400 text-sm">Cargando...</td>
-              </tr>
+              <tr><td colSpan={9} className="px-6 py-10 text-center text-fg-muted text-sm">Cargando...</td></tr>
             ) : recurringExpenses.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-6 py-10 text-center text-gray-400 text-sm">
-                  No hay gastos fijos. ¡Creá el primero!
-                </td>
-              </tr>
+              <tr><td colSpan={9} className="p-0">
+                <EmptyState icon={Repeat} title="No hay gastos fijos" description="Creá tu primer gasto fijo (alquiler, suscripciones, cuotas)."
+                  action={<Button size="sm" onClick={openNew}><Plus size={14} />Nuevo gasto fijo</Button>} />
+              </td></tr>
             ) : recurringExpenses.map(r => (
-              <tr key={r.id} className="hover:bg-gray-50 transition-colors group">
-                <td className="px-6 py-3 text-gray-800">
-                  {r.description || <span className="text-gray-400 italic">Sin descripción</span>}
+              <tr key={r.id} className="hover:bg-surface-2/60 transition-colors group">
+                <td className="px-6 py-3 text-fg">
+                  {r.description || <span className="text-fg-muted italic">Sin descripción</span>}
                 </td>
                 <td className="px-6 py-3">
                   {r.category ? (
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ background: r.category.color ?? '#94a3b8' }} />
-                      <span className="text-gray-600">{r.category.name}</span>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: r.category.color ?? 'var(--fg-muted)' }} />
+                      <span className="text-fg-muted">{r.category.name}</span>
                     </span>
-                  ) : <span className="text-gray-400">—</span>}
+                  ) : <span className="text-fg-muted">—</span>}
                 </td>
-                <td className="px-6 py-3 text-gray-600">
-                  {r.paymentMethod?.name ?? <span className="text-gray-400">—</span>}
+                <td className="px-6 py-3 text-fg-muted">
+                  {r.paymentMethod?.name ?? <span className="text-fg-muted">—</span>}
                 </td>
-                <td className="px-6 py-3 text-gray-500 tabular-nums">{r.dayOfMonth}</td>
-                <td className="px-6 py-3 text-gray-600">
+                <td className="px-6 py-3 text-fg-muted font-mono tabular">{r.dayOfMonth}</td>
+                <td className="px-6 py-3 text-fg-muted">
                   {r.totalInstallments ? `${r.totalInstallments} cuotas` : 'Indefinido'}
                 </td>
                 <td className="px-6 py-3">
                   {(() => {
                     const occ = monthOccurrences[r.id]
-                    if (!r.active) return <span className="text-gray-400">—</span>
-                    if (!occ) return <span className="text-gray-400 text-xs">Sin cuota</span>
+                    if (!r.active) return <span className="text-fg-muted">—</span>
+                    if (!occ) return <span className="text-fg-muted text-xs">Sin cuota</span>
                     if (occ.paid) {
                       return (
                         <span className="inline-flex items-center gap-2">
-                          <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700">
-                            Pagado
-                          </span>
+                          <Badge tone="accent">Pagado</Badge>
                           <button onClick={() => handleTogglePaid(occ)} disabled={payingId === occ.id}
-                            className="text-xs text-gray-400 hover:text-gray-700 hover:underline disabled:opacity-50">
+                            className="text-xs text-fg-muted hover:text-fg hover:underline disabled:opacity-50">
                             Deshacer
                           </button>
                         </span>
@@ -303,39 +280,33 @@ export default function RecurringExpensesPage() {
                     }
                     return (
                       <button onClick={() => handleTogglePaid(occ)} disabled={payingId === occ.id}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50">
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-warning/12 text-warning hover:bg-warning/20 transition-colors disabled:opacity-50">
                         <Check size={12} /> Marcar pagado
                       </button>
                     )
                   })()}
                 </td>
                 <td className="px-6 py-3">
-                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                    r.active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {r.active ? 'Activo' : 'Cancelado'}
-                  </span>
+                  <Badge tone={r.active ? 'accent' : 'neutral'}>{r.active ? 'Activo' : 'Cancelado'}</Badge>
                 </td>
-                <td className="px-6 py-3 text-right tabular-nums">
-                  <div className="font-medium text-gray-900">
-                    {r.currency?.symbol}{Number(r.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                    {r.totalInstallments && <span className="text-gray-400 font-normal"> total</span>}
+                <td className="px-6 py-3 text-right">
+                  <div className="text-fg font-medium">
+                    <Money value={Number(r.amount)} symbol={r.currency?.symbol ?? '$'} />
+                    {r.totalInstallments && <span className="text-fg-muted font-normal"> total</span>}
                   </div>
                   {r.totalInstallments && (
-                    <div className="text-xs text-gray-400">
-                      {r.currency?.symbol}{(Number(r.amount) / r.totalInstallments).toLocaleString('es-AR', { minimumFractionDigits: 2 })} c/u
+                    <div className="text-xs text-fg-muted font-mono tabular">
+                      {r.currency?.symbol}{fmtAmount(Number(r.amount) / r.totalInstallments)} c/u
                     </div>
                   )}
                 </td>
                 <td className="px-4 py-3">
                   {r.active && (
                     <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => openEdit(r)}
-                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors">
+                      <button onClick={() => openEdit(r)} className="p-1.5 text-fg-muted hover:text-fg hover:bg-surface-2 rounded transition-colors">
                         <Pencil size={13} />
                       </button>
-                      <button onClick={() => handleCancel(r.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
+                      <button onClick={() => handleCancel(r.id)} className="p-1.5 text-fg-muted hover:text-negative hover:bg-negative/10 rounded transition-colors">
                         <Ban size={13} />
                       </button>
                     </div>
@@ -345,117 +316,88 @@ export default function RecurringExpensesPage() {
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* Modal */}
       {modal && (
         <Modal title={editing ? 'Editar gasto fijo' : 'Nuevo gasto fijo'} onClose={() => setModal(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>{form.hasInstallments ? 'Monto total *' : 'Monto mensual *'}</label>
-                <input type="number" step="0.01" min="0.01" value={form.amount}
-                  onChange={e => setForm({ ...form, amount: e.target.value })}
-                  className={inputCls} placeholder="0.00" required />
-              </div>
-              <div>
-                <label className={labelCls}>Moneda *</label>
-                <select value={form.currencyCode}
-                  onChange={e => setForm({ ...form, currencyCode: e.target.value })}
-                  className={inputCls}>
-                  {currencies.map(c => (
-                    <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
-                  ))}
-                </select>
-              </div>
+              <Field label={form.hasInstallments ? 'Monto total' : 'Monto mensual'} required>
+                <Input type="number" step="0.01" min="0.01" value={form.amount}
+                  onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0.00" required />
+              </Field>
+              <Field label="Moneda" required>
+                <Select value={form.currencyCode} onChange={e => setForm({ ...form, currencyCode: e.target.value })}>
+                  {currencies.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+                </Select>
+              </Field>
             </div>
 
-            <div>
-              <label className={labelCls}>Descripción</label>
-              <input type="text" value={form.description}
-                onChange={e => setForm({ ...form, description: e.target.value })}
-                className={inputCls} placeholder="Ej: Netflix" />
-            </div>
+            <Field label="Descripción">
+              <Input type="text" value={form.description}
+                onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Ej: Netflix" />
+            </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Tipo *</label>
-                <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ExpenseType })}
-                  className={inputCls}>
+              <Field label="Tipo" required>
+                <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ExpenseType })}>
                   <option value="PERSONAL">Personal</option>
                   <option value="WORK">Trabajo</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Día del mes *</label>
-                <input type="number" min="1" max="31" value={form.dayOfMonth}
-                  onChange={e => setForm({ ...form, dayOfMonth: e.target.value })}
-                  className={inputCls} required />
-              </div>
+                </Select>
+              </Field>
+              <Field label="Día del mes" required>
+                <Input type="number" min="1" max="31" value={form.dayOfMonth}
+                  onChange={e => setForm({ ...form, dayOfMonth: e.target.value })} required />
+              </Field>
             </div>
 
-            <div>
-              <label className={labelCls}>Fecha de inicio *</label>
-              <input type="date" value={form.startDate}
-                onChange={e => setForm({ ...form, startDate: e.target.value })}
-                className={inputCls} disabled={!!editing} required />
-              {editing && <p className="text-xs text-gray-400 mt-1">No se puede modificar</p>}
-            </div>
+            <Field label="Fecha de inicio" required error={editing ? 'No se puede modificar' : undefined}>
+              <Input type="date" value={form.startDate}
+                onChange={e => setForm({ ...form, startDate: e.target.value })} disabled={!!editing} required />
+            </Field>
 
-            <div>
-              <label className={labelCls}>Categoría</label>
-              <select value={form.categoryId}
-                onChange={e => setForm({ ...form, categoryId: e.target.value })}
-                className={inputCls}>
+            <Field label="Categoría">
+              <Select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })}>
                 <option value="">Sin categoría</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
 
-            <div>
-              <label className={labelCls}>Método de pago</label>
-              <select value={form.paymentMethodId}
-                onChange={e => setForm({ ...form, paymentMethodId: e.target.value })}
-                className={inputCls}>
+            <Field label="Método de pago">
+              <Select value={form.paymentMethodId} onChange={e => setForm({ ...form, paymentMethodId: e.target.value })}>
                 <option value="">Sin método de pago</option>
                 {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
 
             <div>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={form.hasInstallments}
-                  onChange={e => setForm({ ...form, hasInstallments: e.target.checked })}
-                  disabled={!!editing} />
+              <label className="flex items-center gap-2 text-sm text-fg">
+                <input type="checkbox" checked={form.hasInstallments} className="accent-[var(--accent)]"
+                  onChange={e => setForm({ ...form, hasInstallments: e.target.checked })} disabled={!!editing} />
                 ¿Tiene una cantidad fija de cuotas?
               </label>
               {form.hasInstallments && (
                 <div className="mt-2">
-                  <label className={labelCls}>Cantidad de cuotas *</label>
-                  <input type="number" min="1" value={form.totalInstallments}
-                    onChange={e => setForm({ ...form, totalInstallments: e.target.value })}
-                    className={inputCls} placeholder="Ej: 6" disabled={!!editing} required />
+                  <Field label="Cantidad de cuotas" required>
+                    <Input type="number" min="1" value={form.totalInstallments}
+                      onChange={e => setForm({ ...form, totalInstallments: e.target.value })} placeholder="Ej: 6" disabled={!!editing} required />
+                  </Field>
                   {perInstallmentPreview !== null && (
-                    <p className="text-xs text-gray-400 mt-1.5">
-                      ≈ {selectedCurrency?.symbol}{perInstallmentPreview.toLocaleString('es-AR', { minimumFractionDigits: 2 })} por cuota
+                    <p className="text-xs text-fg-muted mt-1.5 font-mono tabular">
+                      ≈ {selectedCurrency?.symbol}{fmtAmount(perInstallmentPreview)} por cuota
                     </p>
                   )}
                 </div>
               )}
-              {editing && <p className="text-xs text-gray-400 mt-1">No se puede modificar</p>}
+              {editing && <p className="text-xs text-fg-muted mt-1">No se puede modificar</p>}
             </div>
 
-            {error && <p className="text-red-600 text-sm">{error}</p>}
+            {error && <p className="text-negative text-sm">{error}</p>}
 
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-50 transition-colors">
-                Cancelar
-              </button>
-              <button type="submit" disabled={saving}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50">
-                {saving ? 'Guardando...' : 'Guardar'}
-              </button>
+              <Button type="button" variant="subtle" onClick={() => setModal(false)} className="flex-1">Cancelar</Button>
+              <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Guardando...' : 'Guardar'}</Button>
             </div>
           </form>
         </Modal>

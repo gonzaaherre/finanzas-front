@@ -3,6 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { login } from '../api/auth'
 import { getErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import AuthLayout from '../components/AuthLayout'
+import Field from '../components/ui/Field'
+import Input from '../components/ui/Input'
+import Button from '../components/ui/Button'
 
 export default function LoginPage() {
   const [form, setForm]     = useState({ email: '', password: '' })
@@ -27,60 +31,34 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm w-full max-w-sm p-6 sm:p-8">
-        <div className="mb-7">
-          <h2 className="text-xl font-semibold text-gray-900">Iniciar sesión</h2>
-          <p className="text-gray-500 text-sm mt-1">Ingresá a tu cuenta</p>
-        </div>
+    <AuthLayout
+      title="Iniciar sesión"
+      subtitle="Ingresá a tu cuenta"
+      footer={<>¿No tenés cuenta? <Link to="/register" className="text-accent hover:brightness-110 font-medium">Registrarse</Link></>}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Email">
+          <Input type="email" value={form.email}
+            onChange={e => setForm({ ...form, email: e.target.value })}
+            placeholder="tu@email.com" required />
+        </Field>
+        <Field label="Contraseña">
+          <Input type="password" value={form.password}
+            onChange={e => setForm({ ...form, password: e.target.value })}
+            placeholder="••••••" required />
+          <p className="text-right text-sm mt-1.5">
+            <Link to="/forgot-password" className="text-accent hover:brightness-110 font-medium">
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </p>
+        </Field>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={e => setForm({ ...form, email: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="tu@email.com"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Contraseña</label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={e => setForm({ ...form, password: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="••••••"
-              required
-            />
-            <p className="text-right text-sm mt-1.5">
-              <Link to="/forgot-password" className="text-blue-600 hover:underline font-medium">
-                ¿Olvidaste tu contraseña?
-              </Link>
-            </p>
-          </div>
+        {error && <p className="text-negative text-sm">{error}</p>}
 
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Ingresando...' : 'Ingresar'}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-gray-500 mt-6">
-          ¿No tenés cuenta?{' '}
-          <Link to="/register" className="text-blue-600 hover:underline font-medium">
-            Registrarse
-          </Link>
-        </p>
-      </div>
-    </div>
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading ? 'Ingresando...' : 'Ingresar'}
+        </Button>
+      </form>
+    </AuthLayout>
   )
 }

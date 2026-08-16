@@ -1,11 +1,20 @@
-import { useState, useEffect, useCallback, type FormEvent, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import { getExpenses, createExpense, updateExpense, deleteExpense } from '../api/expenses'
 import { getCategories } from '../api/categories'
 import { getPaymentMethods } from '../api/paymentMethods'
 import { getCurrencies } from '../api/currencies'
 import { getErrorMessage } from '../api/client'
-import { Plus, Pencil, Trash2, X, SlidersHorizontal, Repeat } from 'lucide-react'
+import { Plus, Pencil, Trash2, SlidersHorizontal, Repeat } from 'lucide-react'
 import type { Category, Currency, Expense, ExpenseFilters, ExpenseRequest, ExpenseType, PaymentMethod } from '../types'
+import Card from '../components/ui/Card'
+import Button from '../components/ui/Button'
+import Modal from '../components/ui/Modal'
+import Field from '../components/ui/Field'
+import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
+import Money from '../components/ui/Money'
+import EmptyState from '../components/ui/EmptyState'
+import { TypeBadge } from '../components/ui/Badge'
 
 interface ExpenseFormState {
   amount: string
@@ -23,39 +32,6 @@ const EMPTY: ExpenseFormState = {
   categoryId: '', paymentMethodId: '', currencyCode: 'ARS',
 }
 
-interface ModalProps {
-  title: string
-  onClose: () => void
-  children: ReactNode
-}
-
-function Modal({ title, onClose, children }: ModalProps) {
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="px-6 py-5 overflow-y-auto">{children}</div>
-      </div>
-    </div>
-  )
-}
-
-function Badge({ type }: { type: ExpenseType }) {
-  const isPersonal = type === 'PERSONAL'
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-      isPersonal ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'
-    }`}>
-      {isPersonal ? 'Personal' : 'Trabajo'}
-    </span>
-  )
-}
-
 interface FiltersState {
   from: string
   to: string
@@ -63,6 +39,8 @@ interface FiltersState {
   categoryId: string
   paymentMethodId: string
 }
+
+const thCls = 'text-left px-6 py-3 text-xs font-medium text-fg-muted uppercase tracking-wider'
 
 export default function ExpensesPage() {
   const [expenses,       setExpenses]       = useState<Expense[]>([])
@@ -161,123 +139,89 @@ export default function ExpensesPage() {
     loadExpenses()
   }
 
-  const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-  const labelCls = 'block text-xs font-medium text-gray-700 mb-1.5'
-
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8 w-full">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Gastos</h2>
-          <p className="text-gray-500 text-sm mt-0.5">{expenses.length} registros</p>
+          <h2 className="text-2xl font-display font-semibold text-fg tracking-tight">Gastos</h2>
+          <p className="text-fg-muted text-sm mt-0.5">{expenses.length} registros</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowFilters(v => !v)}
-            className={`flex items-center gap-2 px-3 py-2 border rounded-md text-sm transition-colors ${
-              showFilters ? 'bg-gray-100 border-gray-300 text-gray-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
+          <Button variant={showFilters ? 'subtle' : 'ghost'} onClick={() => setShowFilters(v => !v)}>
             <SlidersHorizontal size={14} />
             Filtros
-          </button>
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
+          </Button>
+          <Button onClick={openNew}>
             <Plus size={15} />
             Nuevo gasto
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Filters */}
       {showFilters && (
-        <div className="bg-white border border-gray-200 rounded-lg px-5 py-4 mb-5">
+        <Card className="px-5 py-4 mb-5 animate-fade-up">
           <div className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className={labelCls}>Desde</label>
-              <input type="date" value={filters.from} onChange={e => setFilters({ ...filters, from: e.target.value })}
-                className="px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className={labelCls}>Hasta</label>
-              <input type="date" value={filters.to} onChange={e => setFilters({ ...filters, to: e.target.value })}
-                className="px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className={labelCls}>Tipo</label>
-              <select value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value as ExpenseType | '' })}
-                className="px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <Field label="Desde" className="w-40"><Input type="date" value={filters.from} onChange={e => setFilters({ ...filters, from: e.target.value })} /></Field>
+            <Field label="Hasta" className="w-40"><Input type="date" value={filters.to} onChange={e => setFilters({ ...filters, to: e.target.value })} /></Field>
+            <Field label="Tipo" className="w-40">
+              <Select value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value as ExpenseType | '' })}>
                 <option value="">Todos</option>
                 <option value="PERSONAL">Personal</option>
                 <option value="WORK">Trabajo</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Categoría</label>
-              <select value={filters.categoryId} onChange={e => setFilters({ ...filters, categoryId: e.target.value })}
-                className="px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              </Select>
+            </Field>
+            <Field label="Categoría" className="w-44">
+              <Select value={filters.categoryId} onChange={e => setFilters({ ...filters, categoryId: e.target.value })}>
                 <option value="">Todas</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Método de pago</label>
-              <select value={filters.paymentMethodId} onChange={e => setFilters({ ...filters, paymentMethodId: e.target.value })}
-                className="px-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              </Select>
+            </Field>
+            <Field label="Método de pago" className="w-44">
+              <Select value={filters.paymentMethodId} onChange={e => setFilters({ ...filters, paymentMethodId: e.target.value })}>
                 <option value="">Todos</option>
                 {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
             <div className="flex gap-2">
-              <button onClick={applyFilters}
-                className="px-4 py-2 bg-gray-900 text-white rounded-md text-sm hover:bg-gray-800 transition-colors">
-                Aplicar
-              </button>
-              <button onClick={clearFilters}
-                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-md text-sm hover:bg-gray-50 transition-colors">
-                Limpiar
-              </button>
+              <Button variant="subtle" onClick={applyFilters}>Aplicar</Button>
+              <Button variant="ghost" onClick={clearFilters}>Limpiar</Button>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+      <Card className="overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Método de pago</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-              <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-              <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
+            <tr className="bg-surface-2 border-b border-line">
+              <th className={thCls}>Descripción</th>
+              <th className={thCls}>Categoría</th>
+              <th className={thCls}>Método de pago</th>
+              <th className={thCls}>Tipo</th>
+              <th className={thCls}>Fecha</th>
+              <th className={thCls + ' text-right'}>Monto</th>
               <th className="px-4 py-3 w-16"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-line">
             {loading ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-10 text-center text-gray-400 text-sm">Cargando...</td>
-              </tr>
+              <tr><td colSpan={7} className="px-6 py-10 text-center text-fg-muted text-sm">Cargando...</td></tr>
             ) : expenses.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-10 text-center text-gray-400 text-sm">
-                  No hay gastos. ¡Creá el primero!
-                </td>
-              </tr>
+              <tr><td colSpan={7} className="p-0">
+                <EmptyState icon={Repeat} title="No hay gastos" description="Creá tu primer gasto para verlo acá."
+                  action={<Button size="sm" onClick={openNew}><Plus size={14} />Nuevo gasto</Button>} />
+              </td></tr>
             ) : expenses.map(e => (
-              <tr key={e.id} className="hover:bg-gray-50 transition-colors group">
-                <td className="px-6 py-3 text-gray-800">
+              <tr key={e.id} className="hover:bg-surface-2/60 transition-colors group">
+                <td className="px-6 py-3 text-fg">
                   <span className="inline-flex items-center gap-1.5">
-                    {e.description || <span className="text-gray-400 italic">Sin descripción</span>}
+                    {e.description || <span className="text-fg-muted italic">Sin descripción</span>}
                     {e.recurringExpenseId && (
                       <span title={e.totalInstallments ? `Cuota ${e.installmentNumber} de ${e.totalInstallments}` : 'Gasto fijo'}>
-                        <Repeat size={12} className="text-gray-400 flex-shrink-0" />
+                        <Repeat size={12} className="text-fg-muted flex-shrink-0" />
                       </span>
                     )}
                   </span>
@@ -285,28 +229,25 @@ export default function ExpensesPage() {
                 <td className="px-6 py-3">
                   {e.category ? (
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ background: e.category.color ?? '#94a3b8' }} />
-                      <span className="text-gray-600">{e.category.name}</span>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: e.category.color ?? 'var(--fg-muted)' }} />
+                      <span className="text-fg-muted">{e.category.name}</span>
                     </span>
-                  ) : <span className="text-gray-400">—</span>}
+                  ) : <span className="text-fg-muted">—</span>}
                 </td>
-                <td className="px-6 py-3 text-gray-600">
-                  {e.paymentMethod?.name ?? <span className="text-gray-400">—</span>}
+                <td className="px-6 py-3 text-fg-muted">
+                  {e.paymentMethod?.name ?? <span className="text-fg-muted">—</span>}
                 </td>
-                <td className="px-6 py-3"><Badge type={e.type} /></td>
-                <td className="px-6 py-3 text-gray-500 tabular-nums">{e.date}</td>
-                <td className="px-6 py-3 text-right font-medium text-gray-900 tabular-nums">
-                  {e.currency?.symbol}{Number(e.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                <td className="px-6 py-3"><TypeBadge type={e.type} /></td>
+                <td className="px-6 py-3 text-fg-muted font-mono tabular">{e.date}</td>
+                <td className="px-6 py-3 text-right">
+                  <Money value={Number(e.amount)} symbol={e.currency?.symbol ?? '$'} className="text-fg font-medium" />
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEdit(e)}
-                      className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors">
+                    <button onClick={() => openEdit(e)} className="p-1.5 text-fg-muted hover:text-fg hover:bg-surface-2 rounded transition-colors">
                       <Pencil size={13} />
                     </button>
-                    <button onClick={() => handleDelete(e.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
+                    <button onClick={() => handleDelete(e.id)} className="p-1.5 text-fg-muted hover:text-negative hover:bg-negative/10 rounded transition-colors">
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -315,86 +256,60 @@ export default function ExpensesPage() {
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* Modal */}
       {modal && (
         <Modal title={editing ? 'Editar gasto' : 'Nuevo gasto'} onClose={() => setModal(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Monto *</label>
-                <input type="number" step="0.01" min="0.01" value={form.amount}
-                  onChange={e => setForm({ ...form, amount: e.target.value })}
-                  className={inputCls} placeholder="0.00" required />
-              </div>
-              <div>
-                <label className={labelCls}>Moneda *</label>
-                <select value={form.currencyCode}
-                  onChange={e => setForm({ ...form, currencyCode: e.target.value })}
-                  className={inputCls}>
-                  {currencies.map(c => (
-                    <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
-                  ))}
-                </select>
-              </div>
+              <Field label="Monto" required>
+                <Input type="number" step="0.01" min="0.01" value={form.amount}
+                  onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0.00" required />
+              </Field>
+              <Field label="Moneda" required>
+                <Select value={form.currencyCode} onChange={e => setForm({ ...form, currencyCode: e.target.value })}>
+                  {currencies.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+                </Select>
+              </Field>
             </div>
 
-            <div>
-              <label className={labelCls}>Descripción</label>
-              <input type="text" value={form.description}
-                onChange={e => setForm({ ...form, description: e.target.value })}
-                className={inputCls} placeholder="Ej: Almuerzo de trabajo" />
-            </div>
+            <Field label="Descripción">
+              <Input type="text" value={form.description}
+                onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Ej: Almuerzo de trabajo" />
+            </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Tipo *</label>
-                <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ExpenseType })}
-                  className={inputCls}>
+              <Field label="Tipo" required>
+                <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as ExpenseType })}>
                   <option value="PERSONAL">Personal</option>
                   <option value="WORK">Trabajo</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Fecha *</label>
-                <input type="date" value={form.date}
-                  onChange={e => setForm({ ...form, date: e.target.value })}
-                  className={inputCls} required />
-              </div>
+                </Select>
+              </Field>
+              <Field label="Fecha" required>
+                <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required />
+              </Field>
             </div>
 
-            <div>
-              <label className={labelCls}>Categoría</label>
-              <select value={form.categoryId}
-                onChange={e => setForm({ ...form, categoryId: e.target.value })}
-                className={inputCls}>
+            <Field label="Categoría">
+              <Select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })}>
                 <option value="">Sin categoría</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
 
-            <div>
-              <label className={labelCls}>Método de pago</label>
-              <select value={form.paymentMethodId}
-                onChange={e => setForm({ ...form, paymentMethodId: e.target.value })}
-                className={inputCls}>
+            <Field label="Método de pago">
+              <Select value={form.paymentMethodId} onChange={e => setForm({ ...form, paymentMethodId: e.target.value })}>
                 <option value="">Sin método de pago</option>
                 {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
 
-            {error && <p className="text-red-600 text-sm">{error}</p>}
+            {error && <p className="text-negative text-sm">{error}</p>}
 
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-50 transition-colors">
-                Cancelar
-              </button>
-              <button type="submit" disabled={saving}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50">
-                {saving ? 'Guardando...' : 'Guardar'}
-              </button>
+              <Button type="button" variant="subtle" onClick={() => setModal(false)} className="flex-1">Cancelar</Button>
+              <Button type="submit" disabled={saving} className="flex-1">{saving ? 'Guardando...' : 'Guardar'}</Button>
             </div>
           </form>
         </Modal>
